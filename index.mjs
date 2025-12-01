@@ -1,3 +1,4 @@
+index.mjs
 import express from "express";
 const app = express();
 import "dotenv/config";
@@ -8,46 +9,39 @@ import { readdirSync } from "fs";
 import dbConnect from "./config/mongodb.js";
 import connectCloudinary from "./config/cloudinary.js";
 
-const port = process.env.PORT;
+// For local development only
+const port = process.env.PORT || 5000;
 
+// Allowed origins
 const allowedOrigins = [
   process.env.ADMIN_URL,
   process.env.CLIENT_URL,
-  // Add production URLs
   "https://orebiclient.reactbd.com",
   "https://orebiadmin.reactbd.com",
-
-  // Add localhost for development
   "http://localhost:5174",
   "http://localhost:5173",
-  "http://localhost:8081", // iOS simulator
-  "http://10.0.2.2:8081", // Android emulator
-  "http://10.0.2.2:8000", // Android emulator direct access
-].filter(Boolean); // Remove any undefined values
+  "http://localhost:8081",
+  "http://10.0.2.2:8081",
+  "http://10.0.2.2:8000",
+].filter(Boolean);
 
-// CORS configuration using config system
 console.log("Allowed CORS Origins:", allowedOrigins);
 console.log("NODE_ENV:", process.env.NODE_ENV);
 
+// CORS
 app.use(
   cors({
     origin: function (origin, callback) {
-      console.log("CORS request from origin:", origin);
-
-      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
 
-      // In development, allow all origins for easier testing
+      // Development: allow everything
       if (process.env.NODE_ENV === "development") {
-        console.log("Development mode: allowing all origins");
         return callback(null, true);
       }
 
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        console.log("Origin allowed:", origin);
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.log("Origin blocked:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -56,25 +50,38 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 app.use(express.json());
 
+// Connect MongoDB + Cloudinary
 dbConnect();
 connectCloudinary();
 
+// Load routes dynamically
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const routesPath = path.resolve(__dirname, "./routes");
 const routeFiles = readdirSync(routesPath);
+
 routeFiles.map(async (file) => {
-  const routeModule = await import(`./routes/${file}`);
-  app.use("/", routeModule.default);
+  if (file.endsWith(".js")) {
+    const routeModule = await import(`./routes/${file}`);
+    app.use("/", routeModule.default);
+  }
 });
 
+// Base route
 app.get("/", (req, res) => {
-  res.send("You should not be here");
+  res.send("API is running successfully.");
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on ${port}`);
-});
+// LOCAL DEV ONLY
+if (process.env.NODE_ENV !== "production") {
+  app.listen(port, () => {
+    console.log(`Local server running on port ${port}`);
+  });
+}
+
+// REQUIRED BY VERCEL
+export default app;
